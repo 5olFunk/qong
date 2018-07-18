@@ -4,6 +4,20 @@
   "use strict";
 
 var designerMode = false;
+var gameId = null;
+var socket;
+var socketIsOpen = false;
+var socket;
+var gameStarted = false;
+var gl;
+var program;
+var firstFrame = false;
+var lastTime = 0;
+var positionAttributeLocation;
+var resolutionUniformLocation;
+var colorUniformLocation;
+var positionBuffer;
+
 
 var splashElement = {
   slices: 30,
@@ -89,8 +103,7 @@ function getPuckConfig() {
         x: 0,
         y: 0,
       },
-    };
-  }
+    }; }
 
   return {
     width: 10,
@@ -250,55 +263,6 @@ function movePuck(puck, fieldConfig, timeDelta) {
     puck.velocity.y *= -1;
   }
 
-//  var nextPuckPosition = {
-//    x: puck.position.x + (puck.velocity.x * timeDelta),
-//    y: puck.position.y + (puck.velocity.y * timeDelta)
-//  };
-//
-//  var currentPuckLeft = puck.position.x - (puck.config.width / 2);
-//  var currentPuckRight = puck.position.x + (puck.config.width / 2);
-//  var currentPuckTop = puck.position.y - (puck.config.height / 2);
-//  var currentPuckBottom = puck.position.y + (puck.config.height / 2);
-//  var nextPuckLeft = nextPuckPosition.x - (puck.config.width / 2);
-//  var nextPuckRight = nextPuckPosition.x + (puck.config.width / 2);
-//  var nextPuckTop = nextPuckPosition.y - (puck.config.height / 2);
-//  var nextPuckBottom = nextPuckPosition.y + (puck.config.height / 2);
-// 
-//  // calculate collisions with right edge of field
-//  var puckRightExcess = nextPuckRight - (fieldConfig.position.x + fieldConfig.width);
-//  if (puckRightExcess >= 0) {
-//    nextPuckPosition.x -= puckRightExcess;
-//    puck.velocity.x *= -1;
-//  }
-//
-//  // calculate collisions with left edge of field
-//  var puckLeftExcess = fieldConfig.position.x - nextPuckLeft;
-//  if (puckLeftExcess >= 0) {
-//    nextPuckPosition.x += puckLeftExcess;
-//    puck.velocity.x *= -1;
-//  }
-//
-//  // calculate collisions with upper paddle
-//  if (currentPuckLeft < upperPaddle.position.x + (upperPaddle.width / 2)
-//     && currentPuckRight > upperPaddle.position.x - (upperPaddle.width / 2)) {
-//    var puckTopExcess = upperPaddle.position.y + (upperPaddle.height / 2) - currentPuckTop;
-//    if (puckTopExcess >= 0) {
-//      puck.position.y += puckTopExcess;
-//      puck.velocity.y *= -1;
-//    }
-//  }
-//
-//  // calculate collisions with upper paddle
-//  if (currentPuckLeft < lowerPaddle.position.x + (lowerPaddle.width / 2)
-//     && currentPuckRight > lowerPaddle.position.x - (lowerPaddle.width / 2)) {
-//    var puckBottomExcess = currentPuckBottom - lowerPaddle.position.y + (lowerPaddle.height / 2);
-//    if (puckBottomExcess >= 0) {
-//      puck.position.y -= puckBottomExcess;
-//      puck.velocity.y *= -1;
-//    }
-//  }
-//
-
   // move puck
   puck.position.y = next.y;
   puck.position.x = next.x;
@@ -323,14 +287,33 @@ function handleKeyPress(e) {
     if (e.key == 'ArrowLeft') {
       e.preventDefault();
       lowerPaddle.position.x -= lowerPaddle.moveSize;
+      socket.send(JSON.stringify({
+        clientName: document.getElementById("userName").value,
+        direction: "Left",
+        distance: lowerPaddle.moveSize
+      }));
     } else if (e.key == 'ArrowRight') {
       e.preventDefault();
       lowerPaddle.position.x += lowerPaddle.moveSize;
-    } else if (e.key == 'a') {
+      socket.send(JSON.stringify({
+        clientName: document.getElementById("userName").value,
+        direction: "Right",
+        distance: lowerPaddle.moveSize
+      }));
+   } else if (e.key == 'a') {
       upperPaddle.position.x -= upperPaddle.moveSize;
     } else if (e.key == 'd') {
       upperPaddle.position.x += upperPaddle.moveSize;
     }
+  }
+}
+
+function handleMoveMsg(move) {
+  if (move.clientName != document.getElementById("userName").value){
+    if (move.direction == 'Left') {
+      upperPaddle.Position += move.distance;
+    }
+    console.log("handling move message!");
   }
 }
 
@@ -449,29 +432,29 @@ function allEqual(args) {
 	return true;
 }
 
-function main() {
+function enterGame() {
   // Get A WebGL context
   /** @type {HTMLCanvasElement} */
   window.addEventListener("keydown", handleKeyPress);
   var canvas = document.getElementById("canvas");
   canvas.focus();
-  var gl = canvas.getContext("webgl");
+  gl = canvas.getContext("webgl");
   if (!gl) {
     return;
   }
 
   // setup GLSL program
-  var program = webglUtils.createProgramFromScripts(gl, ["2d-vertex-shader", "2d-fragment-shader"]);
+  program = webglUtils.createProgramFromScripts(gl, ["2d-vertex-shader", "2d-fragment-shader"]);
 
   // look up where the vertex data needs to go.
-  var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+  positionAttributeLocation = gl.getAttribLocation(program, "a_position");
 
   // look up uniform locations
-  var resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
-  var colorUniformLocation = gl.getUniformLocation(program, "u_color");
+  resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+  colorUniformLocation = gl.getUniformLocation(program, "u_color");
 
   // Create a buffer to put three 2d clip space points in
-  var positionBuffer = gl.createBuffer();
+  positionBuffer = gl.createBuffer();
 
   // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -479,172 +462,10 @@ function main() {
   initializePuck();
   initializeLowerPaddle();
   initializeUpperPaddle();
-  var lastTime = 0;
   //drawSplash();
-  drawScene();
+  getDrawScene(false)();
 
-  function drawScene(time) {
-    var timeDelta = 0;
-    if (typeof time != 'undefined') {
-      var seconds = time / 1000; 
-      timeDelta = seconds - lastTime;
-      lastTime = seconds;
-    }
 
-    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
-  
-    // Tell WebGL how to convert from clip space to pixels
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-  
-    // Clear the canvas
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    
-    
-    //// draw field ////
-
-    // Tell it to use our program (pair of shaders)
-    gl.useProgram(program);
-  
-    // Turn on the attribute
-    gl.enableVertexAttribArray(positionAttributeLocation);
-  
-    // Bind the position buffer.
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  
-    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-    var size = 2;          // 2 components per iteration
-    var type = gl.FLOAT;   // the data is 32bit floats
-    var normalize = false; // don't normalize the data
-    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-    var offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-        positionAttributeLocation, size, type, normalize, stride, offset)
-  
-    // set the resolution
-    gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
-    
-    var fieldConfig = getFieldConfig();
-    //// left border ////
-    setRectangle(
-        gl,  
-        fieldConfig.position.x - fieldConfig.border.thickness, 
-        fieldConfig.position.y, 
-        fieldConfig.border.thickness, 
-        fieldConfig.height,
-    );
-  
-    // set color
-    gl.uniform4f(
-      colorUniformLocation, 
-      fieldConfig.border.color.r,
-      fieldConfig.border.color.g,
-      fieldConfig.border.color.b,
-      1);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-
-    //// right border ////
-    setRectangle(
-        gl, 
-        fieldConfig.position.x + fieldConfig.width,
-        fieldConfig.position.y,
-        fieldConfig.border.thickness,
-        fieldConfig.height,
-    );
-
-    // set color
-    gl.uniform4f(
-      colorUniformLocation, 
-      fieldConfig.border.color.r,
-      fieldConfig.border.color.g,
-      fieldConfig.border.color.b,
-      1);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-
-    //// puck ////
-    puck.config = getPuckConfig();
-    puck = movePuck(puck, fieldConfig, timeDelta);
-    setRectangle(
-        gl, 
-        puck.position.x - (puck.config.width / 2),
-        puck.position.y - (puck.config.height / 2),
-        puck.config.width,
-        puck.config.height,
-    );
-
-    // set color
-    gl.uniform4f(
-      colorUniformLocation, 
-      puck.config.color.r,
-      puck.config.color.g,
-      puck.config.color.b,
-      1);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-
-    //// lower paddle ////
-    setRectangle(
-        gl, 
-        lowerPaddle.position.x - (lowerPaddle.width / 2),
-        lowerPaddle.position.y - (lowerPaddle.height / 2),
-        lowerPaddle.width,
-        lowerPaddle.height,
-    );
-
-    // set color
-    gl.uniform4f(
-      colorUniformLocation, 
-      0,
-      0,
-      0,
-      1);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-
-    //// upper paddle ////
-    setRectangle(
-        gl, 
-        upperPaddle.position.x - (upperPaddle.width / 2),
-        upperPaddle.position.y - (upperPaddle.height / 2),
-        upperPaddle.width,
-        upperPaddle.height,
-    );
-
-    // set color
-    gl.uniform4f(
-      colorUniformLocation, 
-      0,
-      0,
-      0,
-      1);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-
-    // Call drawScene again next frame
-    requestAnimationFrame(drawScene);
-  }
 
   function drawSplash() {
     webglUtils.resizeCanvasToDisplaySize(gl.canvas);
@@ -705,6 +526,177 @@ function main() {
   }
 }
 
+function getDrawScene(animate) {
+  function drawScene(time) {
+    if (animate && firstFrame) {
+      lastTime = time;
+      firstFrame = false;
+    }
+    var timeDelta = 0;
+    if (typeof time != 'undefined' && gameStarted) {
+      var seconds = time / 1000; 
+      timeDelta = seconds - lastTime;
+      lastTime = seconds;
+    }
+  
+    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+  
+    // Tell WebGL how to convert from clip space to pixels
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  
+    // Clear the canvas
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    
+    
+    //// draw field ////
+  
+    // Tell it to use our program (pair of shaders)
+    gl.useProgram(program);
+  
+    // Turn on the attribute
+    gl.enableVertexAttribArray(positionAttributeLocation);
+  
+    // Bind the position buffer.
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  
+    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+    var size = 2;          // 2 components per iteration
+    var type = gl.FLOAT;   // the data is 32bit floats
+    var normalize = false; // don't normalize the data
+    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+    var offset = 0;        // start at the beginning of the buffer
+    gl.vertexAttribPointer(
+        positionAttributeLocation, size, type, normalize, stride, offset)
+  
+    // set the resolution
+    gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
+    
+    var fieldConfig = getFieldConfig();
+    //// left border ////
+    setRectangle(
+        gl,  
+        fieldConfig.position.x - fieldConfig.border.thickness, 
+        fieldConfig.position.y, 
+        fieldConfig.border.thickness, 
+        fieldConfig.height,
+    );
+  
+    // set color
+    gl.uniform4f(
+      colorUniformLocation, 
+      fieldConfig.border.color.r,
+      fieldConfig.border.color.g,
+      fieldConfig.border.color.b,
+      1);
+  
+    // Draw the rectangle.
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  
+    //// right border ////
+    setRectangle(
+        gl, 
+        fieldConfig.position.x + fieldConfig.width,
+        fieldConfig.position.y,
+        fieldConfig.border.thickness,
+        fieldConfig.height,
+    );
+  
+    // set color
+    gl.uniform4f(
+      colorUniformLocation, 
+      fieldConfig.border.color.r,
+      fieldConfig.border.color.g,
+      fieldConfig.border.color.b,
+      1);
+  
+    // Draw the rectangle.
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  
+    //// puck ////
+    puck.config = getPuckConfig();
+    puck = movePuck(puck, fieldConfig, timeDelta);
+    setRectangle(
+        gl, 
+        puck.position.x - (puck.config.width / 2),
+        puck.position.y - (puck.config.height / 2),
+        puck.config.width,
+        puck.config.height,
+    );
+  
+    // set color
+    gl.uniform4f(
+      colorUniformLocation, 
+      puck.config.color.r,
+      puck.config.color.g,
+      puck.config.color.b,
+      1);
+  
+    // Draw the rectangle.
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  
+    //// lower paddle ////
+    setRectangle(
+        gl, 
+        lowerPaddle.position.x - (lowerPaddle.width / 2),
+        lowerPaddle.position.y - (lowerPaddle.height / 2),
+        lowerPaddle.width,
+        lowerPaddle.height,
+    );
+  
+    // set color
+    gl.uniform4f(
+      colorUniformLocation, 
+      0,
+      0,
+      0,
+      1);
+  
+    // Draw the rectangle.
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  
+    //// upper paddle ////
+    setRectangle(
+        gl, 
+        upperPaddle.position.x - (upperPaddle.width / 2),
+        upperPaddle.position.y - (upperPaddle.height / 2),
+        upperPaddle.width,
+        upperPaddle.height,
+    );
+  
+    // set color
+    gl.uniform4f(
+      colorUniformLocation, 
+      0,
+      0,
+      0,
+      1);
+  
+    // Draw the rectangle.
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  
+    // Call drawScene again next frame
+    if (gameStarted) {
+      requestAnimationFrame(drawScene);
+    }
+  }
+  return drawScene;
+}
 
 // Returns a random integer from 0 to range - 1.
 function randomInt(range) {
@@ -742,6 +734,90 @@ function setCircle(gl, x, y, r, slices) {
   gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
 }
 
+function establishSocketConnection() {
+  socket = new WebSocket("ws://localhost:9160");
+  socket.onmessage = handleMessage;
+  console.log("Requested socket connection.");
+  socket.onopen = function (event) {
+    console.log("Connection established.");
+  };
+  socket.onerror = function (event) {
+    console.log(event.data);
+  };
+  socket.onclose = function (event) {
+    console.log(event.data);
+  };
+}
 
-main();
+function startGame() {
+  gameStarted = true;
+  getDrawScene(gameStarted)();
+}
 
+function requestNewGame() {
+  if (socket.readyState != 1) {
+    alert("Connection to server lost.");
+    return;
+  }
+  socket.send(JSON.stringify({
+    messageType: "NewGameReqMsg",
+    userName: document.getElementById("userName").value,
+    gameName: document.getElementById("gameName").value
+  }));
+}
+
+function requestJoinGame() {
+  if (socket.readyState != 1) {
+    alert("Connection to server lost.");
+    return;
+  }
+  socket.send(JSON.stringify({
+    messageType: "JoinGameReqMsg",
+    userName: document.getElementById("userName").value,
+    gameName: document.getElementById("gameName").value
+  })); 
+}
+
+function requestStartGame() {
+  if (socket.readyState != 1) {
+    alert("Connection to server lost.");
+    return;
+  }
+  socket.send(JSON.stringify({
+    messageType: "StartGameReqMsg",
+    gameName: document.getElementById("gameName").value
+  }));
+}
+
+function handleMessage(event) {
+  var msg = JSON.parse(event.data);
+  switch (msg.messageType) {
+    case "NewGameResMsg":
+      console.log("NewGameResMsg received: " + msg.result);
+      if (msg.result == "GameCreated") {
+        enterGame();
+      } else {
+        alert("Failed to create game with exception: " + msg.result);
+      }
+      break;
+    case "JoinGameResMsg":
+      console.log("JoinGameResMsg received: " + msg.result);
+      if (msg.result == "JoinedGame") {
+        enterGame();
+      } else {
+        alert("Failed to join game with exception: " + msg.result);
+      }
+    case "StartGameMsg":
+      console.log("StartGame message received");
+      startGame();
+      break;
+    case "MoveMsg":
+      console.log("Move message received");
+      handleMoveMsg(msg)
+      break;
+    default:
+      console.log("Message received: " + event.data);
+  }
+}
+
+window.onload = establishSocketConnection;

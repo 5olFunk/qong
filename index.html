@@ -9,36 +9,13 @@
 <canvas tabIndex="0" id="canvas"></canvas>
 <table>
   <tr>
-    <td>Field Color
-    <td>R: <input type="text" id="borderColorR" value="0" />
-    <td>G: <input type="text" id="borderColorG" value="0" />
-    <td>B: <input type="text" id="borderColorB" value="0" />
-  </tr>
-  <tr>
-    <td>Border Thickness: <input type="text" id="borderThickness" value="10" />
-  </tr>
-  <tr>
-    <td>Field Size
-    <td>Width: <input type="text" id="fieldWidth" value="300" />
-    <td>Height: <input type="text" id="fieldHeight" value="300" />
-  </tr>
-  <tr>
-    <td>Field Position
-    <td>X: <input type="text" id="fieldPositionX" value="50" />
-    <td>Y: <input type="text" id="fieldPositionY" value="50" />
-  </tr>
-  <tr>
-    <td>Puck Size
-    <td>Width: <input type="text" id="puckWidth" value="10" />
-    <td>Height: <input type="text" id="puckHeight" value="10" />
-  </tr>
-  <tr>
-    <td>Puck Color
-    <td>R: <input type="text" id="puckColorR" value="0" />
-    <td>G: <input type="text" id="puckColorG" value="0" />
-    <td>B: <input type="text" id="puckColorB" value="0" />
+    <td>User Name <input type="text" id="userName" value="ian" />
+    <td>Game Name <input type="text" id="gameName" value="ian's game" />
   </tr>
 </table>
+<input id="newGame" type="button" value="New Game" onclick="requestNewGame();" />
+<input id="joinGame" type="button" value="Join Game" onclick="requestJoinGame();" />
+<input id="startGame" type="button" value="Start Game" onclick="requestStartGame();" />
 </body>
 <!-- vertex shader -->
 <script id="2d-vertex-shader" type="x-shader/x-vertex">
