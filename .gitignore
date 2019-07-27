@@ -1,0 +1,5 @@
+elm-stuff/*
+textures/*
+*.swn
+*.swo
+*.swp
